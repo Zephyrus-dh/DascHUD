@@ -1,0 +1,11 @@
+# User configuration & API secrets
+config.json
+
+# Build outputs and binaries
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio temporary files
+.vs/
+*.user
+*.suo

@@ -1,0 +1,15 @@
+{
+  "latitude": 31.5203,
+  "longitude": 74.4105,
+  "city_code": "OPLA",
+  "radar_range_km": 100.0,
+  "display_monitor": 1,
+  "opensky_client_id": "",
+  "opensky_client_secret": "",
+  "hud_horizontal_alignment": "Right",
+  "hud_vertical_alignment": "Bottom",
+  "hud_margin_left": 20,
+  "hud_margin_top": 20,
+  "hud_margin_right": 20,
+  "hud_margin_bottom": 20
+}
