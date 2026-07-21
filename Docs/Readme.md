@@ -1,7 +1,7 @@
 # DacsHUD
 
 <p align="center">
-  <img src="docs/demo.gif" alt="DachsHUD Demo" width="900">
+  <img src="demo.gif" alt="DachsHUD Demo" width="900">
 </p>
 
 > **Monitor the situation while you monitor the situation.**
