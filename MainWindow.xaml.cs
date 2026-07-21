@@ -38,7 +38,7 @@ namespace DascHUD
             UpdateClock();
             
             WeatherText.Text = "WEATHER: Fetching...";
-            DisasterText.Text = "🛡️ REGIONAL TECTONIC: Fetching...";
+            DisasterText.Text = "";
             FlightText.Text = $"✈️ {_config.CityCode}: initializing Radar Link";
             EmergencyText.Text = "";
         }
@@ -243,6 +243,8 @@ namespace DascHUD
                 {
                     DisasterText.Text = string.Join("\n", activeAlerts);
                     DisasterText.Foreground = System.Windows.Media.Brushes.OrangeRed;
+                    await Task.Delay(TimeSpan.FromSeconds(30));
+                    DisasterText.Text = "";
                 }
                 else
                 {
@@ -288,214 +290,233 @@ namespace DascHUD
             }
             catch { return null; }
         }
+        private async Task<string> GetLocationNameAsync(double lat, double lon)
+{
+    try
+    {
+        // Free, no-key reverse geocoding API
+        string url = $"https://api.bigdatacloud.net/data/reverse-geocode-client?latitude={lat}&longitude={lon}&localityLanguage=en";
+        string response = await Http.GetStringAsync(url);
+        using var doc = JsonDocument.Parse(response);
+        
+        string city = doc.RootElement.TryGetProperty("city", out var cityProp) ? cityProp.GetString() : "";
+        string country = doc.RootElement.TryGetProperty("countryName", out var countryProp) ? countryProp.GetString() : "";
+        string locality = doc.RootElement.TryGetProperty("locality", out var locProp) ? locProp.GetString() : "";
 
-        private async Task FetchFlightDataAsync()
+        // Format nicely depending on what data the API finds
+        if (!string.IsNullOrWhiteSpace(city) && !string.IsNullOrWhiteSpace(country))
+            return $"{city}, {country}";
+        
+        if (!string.IsNullOrWhiteSpace(locality) && !string.IsNullOrWhiteSpace(country))
+            return $"{locality}, {country}";
+            
+        if (!string.IsNullOrWhiteSpace(country))
+            return country;
+            
+        return $"[{lat:F2}, {lon:F2}]"; // Fallback to coords if over the ocean or unmapped
+    }
+    catch
+    {
+        return $"[{lat:F2}, {lon:F2}]"; // Fallback to coords if offline
+    }
+}
+private async Task FetchFlightDataAsync()
+{
+    var formattedPlanes = new List<string>();
+    var emergencyPlanes = new List<string>();
+
+    // 1. GLOBAL EMERGENCIES (adsb.lol API)
+    string[] emergencyCodes = { "7500", "7600", "7700" };
+    foreach (string sqCode in emergencyCodes)
+    {
+        try 
         {
-            try
+            string emgUrl = $"https://api.adsb.lol/v2/squawk/{sqCode}";
+            string emgResponse = await Http.GetStringAsync(emgUrl);
+            using var emgDoc = JsonDocument.Parse(emgResponse);
+            
+            if (emgDoc.RootElement.TryGetProperty("ac", out var acArray) && acArray.ValueKind == JsonValueKind.Array)
             {
-                var formattedPlanes = new List<string>();
-                var emergencyPlanes = new List<string>();
-
-                // 1. GLOBAL EMERGENCIES (adsb.lol API)
-                string[] emergencyCodes = { "7500", "7600", "7700" };
-                foreach (string sqCode in emergencyCodes)
+                string alertType = sqCode switch
                 {
-                    try 
+                    "7500" => "HIJACK",
+                    "7600" => "RADIO FAIL",
+                    "7700" => "EMERGENCY",
+                    _ => "ALERT"
+                };
+
+                foreach (var plane in acArray.EnumerateArray())
+                {
+                    string callsign = plane.TryGetProperty("flight", out var f) ? f.GetString()?.Trim() ?? "Unk" : "Unk";
+                    if (string.IsNullOrWhiteSpace(callsign)) callsign = "Unk";
+
+                    string acType = plane.TryGetProperty("t", out var tProp) && tProp.ValueKind == JsonValueKind.String 
+                        ? tProp.GetString()?.Trim() ?? "UnkType" : "UnkType";
+
+                    string location = "Unk Loc";
+                    if (plane.TryGetProperty("lat", out var latProp) && latProp.ValueKind == JsonValueKind.Number &&
+                        plane.TryGetProperty("lon", out var lonProp) && lonProp.ValueKind == JsonValueKind.Number)
                     {
-                        string emgUrl = $"https://api.adsb.lol/v2/squawk/{sqCode}";
-                        string emgResponse = await Http.GetStringAsync(emgUrl);
-                        using var emgDoc = JsonDocument.Parse(emgResponse);
+                        double lat = latProp.GetDouble();
+                        double lon = lonProp.GetDouble();
                         
-                        if (emgDoc.RootElement.TryGetProperty("ac", out var acArray) && acArray.ValueKind == JsonValueKind.Array)
-                        {
-                            string alertType = sqCode switch
-                            {
-                                "7500" => "HIJACK",
-                                "7600" => "RADIO FAIL",
-                                "7700" => "EMERGENCY",
-                                _ => "ALERT"
-                            };
-
-                            foreach (var plane in acArray.EnumerateArray())
-                            {
-                                string callsign = plane.TryGetProperty("flight", out var f) ? f.GetString()?.Trim() ?? "Unk" : "Unk";
-                                if (string.IsNullOrWhiteSpace(callsign)) callsign = "Unk";
-
-                                string alt = "Unk";
-                                if (plane.TryGetProperty("alt_baro", out var altProp))
-                                {
-                                    if (altProp.ValueKind == JsonValueKind.Number)
-                                        alt = $"{altProp.GetInt32()}ft";
-                                    else if (altProp.ValueKind == JsonValueKind.String && altProp.GetString() == "ground")
-                                        alt = "TAXI/GATE";
-                                }
-                                emergencyPlanes.Add($"🚨 {alertType} ({sqCode}): {callsign} (@ {alt})");
-                            }
-                        }
-                    }
-                    catch { /* Continue on global API failure */ }
-                }
-
-                // 2. LOCAL TRAFFIC & VISUALS (OpenSky API)
-                try
-                {
-                    if (!Http.DefaultRequestHeaders.UserAgent.TryParseAdd("DascHUD/1.0"))
-                    {
-                        Http.DefaultRequestHeaders.UserAgent.Clear();
-                        Http.DefaultRequestHeaders.UserAgent.ParseAdd("DascHUD/1.0");
+                        location = await GetLocationNameAsync(lat, lon);
                     }
 
-                    string token = await GetOpenSkyTokenAsync();
-                    if (!string.IsNullOrEmpty(token))
-                    {
-                        Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-                    }
-                    else
-                    {
-                        Http.DefaultRequestHeaders.Authorization = null; 
-                    }
-
-                    // Window Frame Math: GPS to Kilometers
-                    double latToKm = 111.32; 
-                    double lonToKm = 111.32 * Math.Cos(_config.Latitude * (Math.PI / 180.0));
-
-                    double deltaLat = ((_config.RadarRangeKm / 2) + 20) / latToKm;
-                    double deltaLon = ((_config.RadarRangeKm / 2) + 20) / lonToKm;
-
-                    double laMin = _config.Latitude - deltaLat;
-                    double laMax = _config.Latitude + deltaLat;
-                    double loMin = _config.Longitude - deltaLon;
-                    double loMax = _config.Longitude + deltaLon;
-
-                    string localUrl = string.Format(CultureInfo.InvariantCulture,
-                        "https://opensky-network.org/api/states/all?lamin={0:F4}&lamax={1:F4}&lomin={2:F4}&lomax={3:F4}",
-                        laMin, laMax, loMin, loMax);
-                        
-                    HttpResponseMessage response = await Http.GetAsync(localUrl);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        int code = (int)response.StatusCode;
-                        string errMsg = code == 429 ? "RATE LIMIT" : $"API ERR {code}";
-                        FlightText.Text = $"✈️ {_config.CityCode}: {errMsg}";
-                        return; 
-                    }
-
-                    string jsonString = await response.Content.ReadAsStringAsync();
-                    using var localDoc = JsonDocument.Parse(jsonString);
-                    var root = localDoc.RootElement;
-
-                    // Radar Pulse Fade Out
-                    var fadeOut = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(500));
-                    AirspaceCanvas.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-                    await Task.Delay(500);
-
-                    AirspaceCanvas.Children.Clear();
-
-                    double screenCenterX = AirspaceCanvas.ActualWidth / 2;
-                    double screenCenterY = AirspaceCanvas.ActualHeight / 2;
-
-                    if (root.TryGetProperty("states", out var states) && states.ValueKind == JsonValueKind.Array)
-                    {
-                        double pixelsPerKm = AirspaceCanvas.ActualWidth / _config.RadarRangeKm; 
-
-                        foreach (var plane in states.EnumerateArray().Take(5)) 
-                        {
-                            string callsign = plane[1].ValueKind == JsonValueKind.String ? plane[1].GetString()?.Trim() ?? "Unk" : "Unk";
-                            if (string.IsNullOrWhiteSpace(callsign)) callsign = "Unk";
-
-                            bool isOnGround = plane[8].ValueKind == JsonValueKind.True;
-                            string alt = isOnGround ? "TAXI/GATE" : 
-                                         plane[7].ValueKind == JsonValueKind.Number ? $"{(int)(plane[7].GetDouble() * 3.28084)}ft" : "Gnd";
-
-                            formattedPlanes.Add($"{callsign} (@ {alt})");
-
-                            double planeLon = plane[5].ValueKind == JsonValueKind.Number ? plane[5].GetDouble() : 0;
-                            double planeLat = plane[6].ValueKind == JsonValueKind.Number ? plane[6].GetDouble() : 0;
-                            double velocityMs = plane[9].ValueKind == JsonValueKind.Number ? plane[9].GetDouble() : 0; 
-                            double heading = plane[10].ValueKind == JsonValueKind.Number ? plane[10].GetDouble() : 0; 
-
-                            if (planeLon == 0 || planeLat == 0) continue;
-
-                            double kmFromCenterX = (planeLon - _config.Longitude) * lonToKm;
-                            double kmFromCenterY = (planeLat - _config.Latitude) * latToKm;
-
-                            double startX = screenCenterX + (kmFromCenterX * pixelsPerKm);
-                            double startY = screenCenterY - (kmFromCenterY * pixelsPerKm);
-
-                            double velocityKmPerMin = (velocityMs * 60) / 1000.0;
-                            double rad = heading * (Math.PI / 180.0);
-                            double deltaXKm = velocityKmPerMin * Math.Sin(rad);
-                            double deltaYKm = velocityKmPerMin * Math.Cos(rad);
-
-                            double endX = startX + (deltaXKm * pixelsPerKm);
-                            double endY = startY - (deltaYKm * pixelsPerKm); 
-
-                            var planeGroup = new System.Windows.Controls.StackPanel 
-                            { 
-                                Orientation = System.Windows.Controls.Orientation.Horizontal 
-                            };
-                            
-                            var planeIcon = new TextBlock 
-                            { 
-                                Text = "✈", 
-                                FontSize = 14, 
-                                Foreground = System.Windows.Media.Brushes.LimeGreen,
-                                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-                                RenderTransform = new RotateTransform(heading - 45) 
-                            };
-
-                            var planeLabel = new TextBlock 
-                            { 
-                                Text = $" {callsign}\n {alt}", 
-                                FontSize = 11, 
-                                Foreground = System.Windows.Media.Brushes.LimeGreen,
-                                Margin = new System.Windows.Thickness(2, -2, 0, 0) 
-                            };
-
-                            planeGroup.Children.Add(planeIcon);
-                            planeGroup.Children.Add(planeLabel);
-
-                            AirspaceCanvas.Children.Add(planeGroup);
-
-                            var xAnim = new DoubleAnimation(startX, endX, TimeSpan.FromMinutes(1));
-                            var yAnim = new DoubleAnimation(startY, endY, TimeSpan.FromMinutes(1));
-
-                            planeGroup.BeginAnimation(Canvas.LeftProperty, xAnim);
-                            planeGroup.BeginAnimation(Canvas.TopProperty, yAnim);
-                        }
-                    }
-
-                    // Radar Pulse Fade In
-                    var fadeIn = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(500));
-                    AirspaceCanvas.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                    emergencyPlanes.Add($"🚨 {alertType} ({sqCode}): {callsign} | {acType} @ {location}");
                 }
-                catch (HttpRequestException)
-                {
-                    FlightText.Text = $"✈️ {_config.CityCode}: NET DOWN";
-                }
-                catch (Exception)
-                {
-                    FlightText.Text = $"✈️ {_config.CityCode}: APP ERR";
-                }
-
-                // 3. UI SYNC
-                EmergencyText.Text = emergencyPlanes.Any() ? string.Join("\n", emergencyPlanes) : "";
-                
-                if (formattedPlanes.Any())
-                {
-                    FlightText.Text = $"✈️ {_config.CityCode} TRAFFIC:\n" + string.Join("\n", formattedPlanes);
-                }
-                else
-                {
-                    FlightText.Text = $"✈️ {_config.CityCode}: No traffic in vicinity";
-                }
-            }
-            catch
-            {
-                FlightText.Text = $"✈️ {_config.CityCode}: Network Offline";
             }
         }
+        catch { /* Continue on global API failure */ }
+    }
+
+    // 2. LOCAL TRAFFIC & VISUALS (OpenSky API)
+    try
+    {
+        if (!Http.DefaultRequestHeaders.UserAgent.TryParseAdd("DascHUD/1.0"))
+        {
+            Http.DefaultRequestHeaders.UserAgent.Clear();
+            Http.DefaultRequestHeaders.UserAgent.ParseAdd("DascHUD/1.0");
+        }
+
+        string token = await GetOpenSkyTokenAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            Http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        }
+        else
+        {
+            Http.DefaultRequestHeaders.Authorization = null; 
+        }
+
+        double latToKm = 111.32; 
+        double lonToKm = 111.32 * Math.Cos(_config.Latitude * (Math.PI / 180.0));
+
+        double deltaLat = ((_config.RadarRangeKm / 2) + 20) / latToKm;
+        double deltaLon = ((_config.RadarRangeKm / 2) + 20) / lonToKm;
+
+        double laMin = _config.Latitude - deltaLat;
+        double laMax = _config.Latitude + deltaLat;
+        double loMin = _config.Longitude - deltaLon;
+        double loMax = _config.Longitude + deltaLon;
+
+        string localUrl = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "https://opensky-network.org/api/states/all?lamin={0:F4}&lamax={1:F4}&lomin={2:F4}&lomax={3:F4}",
+            laMin, laMax, loMin, loMax);
+            
+        HttpResponseMessage response = await Http.GetAsync(localUrl);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            int code = (int)response.StatusCode;
+            string errMsg = code == 429 ? "RATE LIMIT" : $"API ERR {code}";
+            FlightText.Text = $"✈️ {_config.CityCode}: {errMsg}";
+            return; 
+        }
+
+        string jsonString = await response.Content.ReadAsStringAsync();
+        using var localDoc = JsonDocument.Parse(jsonString);
+        var root = localDoc.RootElement;
+
+        var fadeOut = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(500));
+        AirspaceCanvas.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+        await Task.Delay(500);
+
+        AirspaceCanvas.Children.Clear();
+
+        double screenCenterX = AirspaceCanvas.ActualWidth / 2;
+        double screenCenterY = AirspaceCanvas.ActualHeight / 2;
+
+        if (root.TryGetProperty("states", out var states) && states.ValueKind == JsonValueKind.Array)
+        {
+            double pixelsPerKm = AirspaceCanvas.ActualWidth / _config.RadarRangeKm; 
+
+            foreach (var plane in states.EnumerateArray().Take(10)) 
+            {
+                string callsign = plane[1].ValueKind == JsonValueKind.String ? plane[1].GetString()?.Trim() ?? "Unk" : "Unk";
+                if (string.IsNullOrWhiteSpace(callsign)) callsign = "Unk";
+
+                bool isOnGround = plane[8].ValueKind == JsonValueKind.True;
+                string alt = isOnGround ? "TAXI/GATE" : 
+                             plane[7].ValueKind == JsonValueKind.Number ? $"{(int)(plane[7].GetDouble() * 3.28084)}ft" : "Gnd";
+
+                double verticalRate = plane[11].ValueKind == JsonValueKind.Number ? plane[11].GetDouble() : 0;
+                string trend = verticalRate > 0.5 ? "↑" : verticalRate < -0.5 ? "↓" : "";
+
+                formattedPlanes.Add($"✈ {callsign} - {alt}");
+
+                double planeLon = plane[5].ValueKind == JsonValueKind.Number ? plane[5].GetDouble() : 0;
+                double planeLat = plane[6].ValueKind == JsonValueKind.Number ? plane[6].GetDouble() : 0;
+                double velocityMs = plane[9].ValueKind == JsonValueKind.Number ? plane[9].GetDouble() : 0; 
+                double heading = plane[10].ValueKind == JsonValueKind.Number ? plane[10].GetDouble() : 0; 
+
+                if (planeLon == 0 || planeLat == 0) continue;
+
+                double kmFromCenterX = (planeLon - _config.Longitude) * lonToKm;
+                double kmFromCenterY = (planeLat - _config.Latitude) * latToKm;
+
+                double startX = screenCenterX + (kmFromCenterX * pixelsPerKm);
+                double startY = screenCenterY - (kmFromCenterY * pixelsPerKm);
+
+                double velocityKmPerMin = (velocityMs * 60) / 1000.0;
+                double rad = heading * (Math.PI / 180.0);
+                double deltaXKm = velocityKmPerMin * Math.Sin(rad);
+                double deltaYKm = velocityKmPerMin * Math.Cos(rad);
+
+                double endX = startX + (deltaXKm * pixelsPerKm);
+                double endY = startY - (deltaYKm * pixelsPerKm); 
+
+                var planeGroup = new System.Windows.Controls.StackPanel 
+                { 
+                    Orientation = System.Windows.Controls.Orientation.Horizontal 
+                };
+                
+                var planeIcon = new TextBlock 
+                { 
+                    Text = "✈", 
+                    FontSize = 14, 
+                    Foreground = System.Windows.Media.Brushes.LimeGreen,
+                    RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                    RenderTransform = new RotateTransform(heading - 45) 
+                };
+
+                var planeLabel = new TextBlock 
+                { 
+                    Text = $" {callsign} {trend}\n {alt}", 
+                    FontSize = 11, 
+                    Foreground = System.Windows.Media.Brushes.LimeGreen,
+                    Margin = new System.Windows.Thickness(2, -2, 0, 0) 
+                };
+
+                planeGroup.Children.Add(planeIcon);
+                planeGroup.Children.Add(planeLabel);
+
+                AirspaceCanvas.Children.Add(planeGroup);
+
+                var xAnim = new DoubleAnimation(startX, endX, TimeSpan.FromMinutes(1));
+                var yAnim = new DoubleAnimation(startY, endY, TimeSpan.FromMinutes(1));
+
+                planeGroup.BeginAnimation(Canvas.LeftProperty, xAnim);
+                planeGroup.BeginAnimation(Canvas.TopProperty, yAnim);
+            }
+        }
+
+        var fadeIn = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(500));
+        AirspaceCanvas.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+    }
+    catch (HttpRequestException)
+    {
+        FlightText.Text = $"✈️ {_config.CityCode}: NET DOWN";
+    }
+    catch (Exception)
+    {
+        FlightText.Text = $"✈️ {_config.CityCode}: APP ERR";
+    }
+
+    // 3. UI SYNC 
+    FlightText.Text = formattedPlanes.Any() ? string.Join("\n", formattedPlanes) : $"✈️ {_config.CityCode} RADAR: CLEAR";
+    EmergencyText.Text = emergencyPlanes.Any() ? string.Join("\n", emergencyPlanes) : "";     
+}
 
         private string ParseWeatherCode(int code) => code switch
         {

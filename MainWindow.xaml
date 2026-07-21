@@ -12,7 +12,7 @@
     
     <Window.Resources>
         <Style TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Space Mono" />
+            <Setter Property="FontFamily" Value="Space Mono, Consolas, Courier New" />
             <Setter Property="Foreground" Value="#FFFFFF" />
             <Setter Property="Effect">
                 <Setter.Value>
@@ -26,13 +26,12 @@
         <Canvas x:Name="AirspaceCanvas" Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
 
         <StackPanel x:Name="HudContainer">
-            <TextBlock x:Name="TimeText" FontSize="20" FontWeight="Bold" />
-            <TextBlock x:Name="DateText" FontSize="15" Margin="0,0,0,10" />
-            <TextBlock x:Name="WeatherText" FontSize="10" Margin="0,0,0,5" />
-            
-            <TextBlock x:Name="DisasterText" FontSize="10" FontWeight="Bold" Foreground="#32CD32" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
+            <TextBlock x:Name="TimeText" FontSize="21" FontWeight="Bold" />
+            <TextBlock x:Name="DateText" FontSize="16" Margin="0,0,0,10" />
+            <TextBlock x:Name="WeatherText" FontSize="11" Margin="0,0,0,5" />
+            <TextBlock x:Name="FlightText" FontSize="11" MaxWidth="450" TextWrapping="Wrap" />
+            <TextBlock x:Name="DisasterText" FontSize="12" FontWeight="Bold" Foreground="#32CD32" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
             <TextBlock x:Name="EmergencyText" FontSize="12" FontWeight="Bold" Foreground="#FF4444" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
-            <TextBlock x:Name="FlightText" FontSize="10" MaxWidth="450" TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
 </Window>
