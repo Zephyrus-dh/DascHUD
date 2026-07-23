@@ -108,9 +108,11 @@ A graphical configurator may be added in a future release if there's enough inte
 - C#
 - WPF
 - .NET
-- OpenSky Network
+- Airplanes.live (Primary ADSB Source)
+- OpenSky Network (Fallback)
 - ADSB.lol
 - Open-Meteo
+- USGS (Siesmic Activity Monitor)
 
 ---
 
@@ -132,9 +134,11 @@ MIT License
 
 DachsHUD uses the following open-source services and resources:
 
+- Airplanes.live
 - OpenSky Network
 - ADSB.lol
 - Open-Meteo
+- USGS
 
 ---
 

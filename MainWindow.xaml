@@ -16,7 +16,7 @@
             <Setter Property="Foreground" Value="#FFFFFF" />
             <Setter Property="Effect">
                 <Setter.Value>
-                    <DropShadowEffect Color="Black" BlurRadius="1" ShadowDepth="0" Opacity="0.2" />
+                    <DropShadowEffect Color="white" BlurRadius="1" ShadowDepth="0" Opacity="0.2" />
                 </Setter.Value>
             </Setter>
         </Style>
