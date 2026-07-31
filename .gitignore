@@ -1,11 +1,44 @@
-# User configuration & API secrets
-config.json
-
-# Build outputs and binaries
-[Bb]in/
-[Oo]bj/
-
-# Visual Studio temporary files
+# Visual Studio / .NET Core / WPF standard ignores
+bin/
+obj/
 .vs/
 *.user
 *.suo
+*.dbmdl
+*.jfm
+*.pnc
+*.appx
+*.appxsym
+*.msix
+*.msixsym
+
+# Publish and Standalone Build Artifacts
+publish/
+Publish/
+out/
+Out/
+*.exe
+*.dll
+*.pdb
+
+# DascHUD Specific - DO NOT COMMIT API KEYS OR LOGS
+config.json
+dashud.log
+dashud.log.old
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Publish and Standalone Build Artifacts
+publish/
+Publish/
+publish-standalone/
+out/
+Out/
+*.exe

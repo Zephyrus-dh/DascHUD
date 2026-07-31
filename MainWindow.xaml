@@ -16,7 +16,7 @@
             <Setter Property="Foreground" Value="#FFFFFF" />
             <Setter Property="Effect">
                 <Setter.Value>
-                    <DropShadowEffect Color="white" BlurRadius="1" ShadowDepth="0" Opacity="0.2" />
+                    <DropShadowEffect Color="#F2F3F4" BlurRadius="1" ShadowDepth="0" Opacity="0.2" />
                 </Setter.Value>
             </Setter>
         </Style>
@@ -28,10 +28,19 @@
         <StackPanel x:Name="HudContainer">
             <TextBlock x:Name="TimeText" FontSize="21" FontWeight="Bold" />
             <TextBlock x:Name="DateText" FontSize="16" Margin="0,0,0,10" />
-            <TextBlock x:Name="WeatherText" FontSize="11" Margin="0,0,0,5" />
+            
+            <!-- Main header separation -->
+            <TextBlock x:Name="WeatherText" FontSize="12" Margin="0,0,0,15" />
+            
+            <!-- ROUTINE TELEMETRY -->
+            <TextBlock x:Name="SatelliteText" FontSize="10" Foreground="Cyan" Margin="0,0,0,5" TextWrapping="Wrap" />
             <TextBlock x:Name="FlightText" FontSize="11" MaxWidth="450" TextWrapping="Wrap" />
-            <TextBlock x:Name="DisasterText" FontSize="12" FontWeight="Bold" Foreground="#32CD32" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
-            <TextBlock x:Name="EmergencyText" FontSize="12" FontWeight="Bold" Foreground="#FF4444" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
-        </StackPanel>
+        
+            <!-- CRITICAL ALERTS -->
+            <TextBlock x:Name="DisasterText" FontSize="11" FontWeight="Bold" Foreground="#32CD32" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
+            <TextBlock x:Name="EmergencyText" FontSize="11" FontWeight="Bold" Foreground="#FF4444" MaxWidth="450" TextWrapping="Wrap" Margin="0,0,0,5" />
+            <TextBlock x:Name="FireText" FontSize="14" Foreground="OrangeRed" Margin="0,0,0,5" TextWrapping="Wrap" />
+            <TextBlock x:Name="NotamText" FontSize="14" Foreground="Gold" Margin="0,0,0,5" TextWrapping="Wrap" />
+            </StackPanel>
     </Grid>
 </Window>
